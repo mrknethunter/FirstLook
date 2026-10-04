@@ -16,7 +16,6 @@ Phone Medical ID screens and paper emergency cards make information available ne
 
 **Emergency department.** An ED operator signs in at `/ed` and sees handovers addressed to their facility. The board updates when a responder sends a pre-alert. The operator can open the handover and move it through acknowledgement, arrival and closure. These actions, along with the responder's access, appear in the patient's history.
 
-For a guided walkthrough, use the [three-persona test guide](docs/PERSONA_TEST_GUIDE.md). It includes the steps and expected results for separate patient, responder and ED sessions.
 
 ## What the QR codes contain
 
@@ -46,13 +45,12 @@ React SPA      FastAPI
 
 Host Caddy terminates HTTPS and routes the SPA and API to services bound only to `127.0.0.1`. Docker Compose separates the public-facing edge network from the internal backend network; PostgreSQL has no published port. The backend is Python 3.12 with FastAPI, Pydantic v2, SQLAlchemy 2, psycopg 3 and Alembic. PostgreSQL also backs the job queue and event notifications. The worker processes staged imports and maintenance jobs. The frontend is a React, strict TypeScript and Vite SPA with Tailwind, Radix primitives, TanStack Query and react-i18next. EN, PL and IT are available in the demo flows.
 
-The code follows the [architecture and technical requirements](docs/FL-DOC-02_Architecture_Technical_Requirements.pdf), the [security and privacy design](docs/FL-DOC-03_Security_Privacy_Design.pdf) and the [project dossier](docs/FL-DOC-01_Project_Dossier.pdf). Approved corrections to those documents are recorded in [DECISIONS.md](docs/DECISIONS.md).
 
 ## Privacy and security by design
 
 Access is based on the minimum information needed for each role. Anonymous break-glass access returns a pseudonymised Essentials Bundle; authenticated responders can receive the fuller emergency view through the same link; ED staff can read handovers addressed to their facility. Every API route declares an authorisation policy, with object-level checks and patient-visible audit events. Break-glass requests require a reason and acknowledgement and are rate limited per link and source IP. Patients can revoke a link, which blocks new manifest reads.
 
-Clinical resources are encrypted with per-patient data keys. Direct identifiers are kept behind a separate vault database role, while application, worker and migration roles have distinct privileges. Sessions are server-side; passwords use Argon2id, browser mutations use CSRF protection, and production professional accounts require MFA. The isolated demo tenant uses synthetic data and a documented MFA exception for judge accounts. Secrets are mounted as files rather than built into images. The viewer keeps decrypted data in memory, and the edge sets `Referrer-Policy: no-referrer`. See [DECISIONS.md](docs/DECISIONS.md) for the demo-specific trade-offs, including the temporary host access-log configuration.
+Clinical resources are encrypted with per-patient data keys. Direct identifiers are kept behind a separate vault database role, while application, worker and migration roles have distinct privileges. Sessions are server-side; passwords use Argon2id, browser mutations use CSRF protection, and production professional accounts require MFA. The isolated demo tenant uses synthetic data and a documented MFA exception for judge accounts. Secrets are mounted as files rather than built into images. The viewer keeps decrypted data in memory, and the edge sets `Referrer-Policy: no-referrer`.
 
 ## Run and verify the demo
 
@@ -65,7 +63,6 @@ docker compose ps
 
 The script creates missing demo secrets, builds the images, runs migrations and seeds the synthetic accounts. To keep the same judge credentials across deployments, copy the separately supplied `demo_credentials.tsv` into `secrets/` **before** running it. Credentials and other secrets are deliberately excluded from the repository and deployment ZIP. The team lead configures the already installed host Caddy using [Caddyfile.example](Caddyfile.example); the script does not edit the host configuration. The approved public origin is `https://firstlook-hy-demo.duckdns.org`.
 
-The [deployment guide](docs/DEPLOYMENT.md) covers first install, upgrades, secret handling, health checks and Caddy routing. The [test guide](docs/PERSONA_TEST_GUIDE.md) covers the judge flow on three separate sessions. Unit, type, lint, browser and security checks are configured in the repository and CI. A successful container start does not replace the phone, authorisation and accessibility checks in the [pre-demo acceptance record](docs/PRE_DEMO_ACCEPTANCE.md).
 
 ## Libraries and external resources
 
