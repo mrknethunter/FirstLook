@@ -1,0 +1,36 @@
+# Codes and class prefixes are taken from FL-DOC-02 §10.3. Text is informational.
+- id: med.anticoagulant
+  version: 1
+  severity: critical
+  match:
+    medication_atc_prefix: [B01AA, B01AE, B01AF]
+  text_key: flags.anticoagulant
+  show_in_essentials: true
+- id: med.insulin
+  version: 1
+  severity: high
+  match:
+    medication_atc_prefix: [A10A]
+  text_key: flags.insulin
+  show_in_essentials: true
+- id: device.cardiac_implant
+  version: 1
+  severity: critical
+  match:
+    device_snomed: ["14106009"]
+  text_key: flags.cardiac_device
+  show_in_essentials: true
+- id: device.insulin_pump
+  version: 1
+  severity: high
+  match:
+    device_type: [insulin_pump]
+  text_key: flags.insulin_pump
+  show_in_essentials: true
+- id: allergy.penicillin
+  version: 1
+  severity: high
+  match:
+    allergy_class: [penicillin]
+  text_key: flags.penicillin_allergy
+  show_in_essentials: true

@@ -1,0 +1,145 @@
+name: firstlook
+
+x-hardening: &hardening
+  read_only: true
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: ["ALL"]
+  tmpfs: ["/tmp:rw,nosuid,noexec,size=64m"]
+  restart: unless-stopped
+
+services:
+  db:
+    build: ./ops/postgres
+    image: firstlook-postgres:16
+    environment:
+      POSTGRES_DB: firstlook
+      POSTGRES_USER_FILE: /run/secrets/pg_super_user
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_super_password
+    command:
+      - postgres
+      - -c
+      - logging_collector=on
+      - -c
+      - log_destination=jsonlog
+      - -c
+      - log_directory=/var/log/postgresql
+      - -c
+      - log_rotation_age=1d
+      - -c
+      - log_truncate_on_rotation=on
+      - -c
+      - password_encryption=scram-sha-256
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - pg_logs:/var/log/postgresql
+      - ./ops/postgres/001_roles.sh:/docker-entrypoint-initdb.d/001_roles.sh:ro
+    networks: [backend]
+    secrets: [pg_super_user, pg_super_password, fl_db_app, fl_db_vault, fl_db_worker, fl_db_migrator]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d firstlook"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 768m
+    cpus: 1.0
+    restart: unless-stopped
+
+  migrate:
+    <<: *hardening
+    build: ./backend
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      FL_ENV: ${FL_ENV:-production}
+      FL_PUBLIC_BASE_URL: ${FL_PUBLIC_BASE_URL:-https://firstlook-hy-demo.duckdns.org}
+    secrets: [fl_db_migrator]
+    depends_on:
+      db: {condition: service_healthy}
+    networks: [backend]
+    restart: "no"
+
+  seed:
+    <<: *hardening
+    profiles: [demo]
+    build: ./backend
+    command: ["python", "-m", "firstlook.seed"]
+    env_file: .env
+    secrets: [fl_db_app, fl_db_vault, fl_kek, fl_pepper, demo_credentials]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    networks: [backend]
+    restart: "no"
+
+  api:
+    <<: *hardening
+    build: ./backend
+    command: ["uvicorn", "firstlook.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "172.30.0.1", "--workers", "2"]
+    env_file: .env
+    ports: ["127.0.0.1:8000:8000"]
+    volumes:
+      - uploads:/data/uploads
+      - api_logs:/var/log/firstlook
+    networks: [edge, backend]
+    secrets: [fl_kek, fl_pepper, fl_db_app, fl_db_vault]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD", "python", "-m", "firstlook.healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    mem_limit: 512m
+    cpus: 1.0
+
+  worker:
+    <<: *hardening
+    build: ./backend
+    command: ["python", "-m", "firstlook.worker"]
+    env_file: .env
+    volumes:
+      - uploads:/data/uploads
+      - worker_logs:/var/log/firstlook
+    networks: [backend]
+    secrets: [fl_kek, fl_pepper, fl_db_worker]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    mem_limit: 512m
+    cpus: 1.0
+
+  web:
+    <<: *hardening
+    build: ./frontend
+    ports: ["127.0.0.1:8080:8080"]
+    tmpfs:
+      - /tmp:rw,nosuid,noexec,size=64m
+      - /config:rw,nosuid,noexec,size=4m,mode=0700,uid=10001,gid=10001
+      - /data:rw,nosuid,noexec,size=8m,mode=0700,uid=10001,gid=10001
+    volumes: [web_logs:/var/log/firstlook]
+    networks: [edge]
+    mem_limit: 128m
+    cpus: 0.5
+
+networks:
+  edge:
+    ipam:
+      config: [{subnet: 172.30.0.0/24}]
+  backend:
+    internal: true
+
+volumes:
+  pgdata: {}
+  pg_logs: {}
+  uploads: {}
+  api_logs: {}
+  worker_logs: {}
+  web_logs: {}
+
+secrets:
+  pg_super_user: {file: ./secrets/pg_super_user}
+  pg_super_password: {file: ./secrets/pg_super_password}
+  fl_db_app: {file: ./secrets/fl_db_app}
+  fl_db_vault: {file: ./secrets/fl_db_vault}
+  fl_db_worker: {file: ./secrets/fl_db_worker}
+  fl_db_migrator: {file: ./secrets/fl_db_migrator}
+  fl_kek: {file: ./secrets/fl_kek}
+  fl_pepper: {file: ./secrets/fl_pepper}
+  demo_credentials: {file: ./secrets/demo_credentials.tsv}
